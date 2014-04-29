@@ -1,4 +1,4 @@
-// Copyright (C) 2014 Maria Jose Galvez Trigo GNU GPLV3
+// Copyright (C) 2014 Maria Jose Galvez Trigo
 
 #include <sys/socket.h>
 #include <sys/param.h>
@@ -16,7 +16,7 @@
 TetheringEnabler::TetheringEnabler(boost::shared_ptr<AL::ALBroker> broker, const std::string& name):
   AL::ALModule(broker, name), memory(getParentBroker()), mutex(AL::ALMutex::createALMutex())
 {
-  setModuleDescription("This module turns NAO into a wifi or bluetooth access point and after that starts a server");
+  setModuleDescription("This module turns NAO into a wifi or bluetooth access point.");
 
   functionName("FrontSensorTouched", getName(), "Called when the front sensor on NAO's head is touched. Turns NAO into a wifi access point.");
   BIND_METHOD(TetheringEnabler::FrontSensorTouched);
@@ -49,26 +49,16 @@ void TetheringEnabler::init()
     // time that the startup sound bips
     sleep(2);
 
-    // If tethering is not enabled NAO will give instructions on how to enable
-    // it via wifi or bluetooth (if there is a bluetooth module installed.
-    if (!connection.getTetheringEnable("wifi") && !connection.getTetheringEnable("bluetooth")) {
-      tts.say("Hello, you will be able to connect to me without cables using tethering mode: ");
-      tts.say("To activate tethering via wifi, touch the front sensor on my head.");
+    // NAO will give instructions on how to activate tethering
+    //tts.say("Hello, you will be able to connect to me without cables using tethering mode: ");
+    tts.say("To activate tethering via wifi, touch the front sensor on my head.");
+    tts.say("To activate tethering via bluetooth, touch the rear sensor on my head.");
 
-      // We subscribe to the events that detect touches on NAO's
-      // head and call the corresponding method.
-      memory.subscribeToEvent("FrontTactilTouched", "TetheringEnabler", "FrontSensorTouched");
+    // We subscribe to the events that detect touches on NAO's
+    // head and call the corresponding method.
+    memory.subscribeToEvent("FrontTactilTouched", "TetheringEnabler", "FrontSensorTouched");
+    memory.subscribeToEvent("RearTactilTouched", "TetheringEnabler", "RearSensorTouched");
 
-      technologies = connection.technologies();
-      it = find (technologies.begin(), technologies.end(), "bluetooth");
-
-      // If there is a bluetooth module then the robot will allow you to enable
-      // tethering via bluetooth and will say how
-      if (it != technologies.end()) {
-        tts.say("To activate tethering via bluetooth, touch the rear sensor on my head.");
-        memory.subscribeToEvent("RearTactilTouched", "TetheringEnabler", "RearSensorTouched");
-      }
-     }
   }
   catch (const AL::ALError& e) {
     qiLogError("module.name") << e.what() << std::endl;
@@ -113,6 +103,7 @@ void TetheringEnabler::FrontSensorTouched()
       tts.say(passphrase);
 
     }
+    memory.subscribeToEvent("FrontTactilTouched", "TetheringEnabler", "FrontSensorTouched");
   }
   catch (const AL::ALError& e) {
     tts.say("I could not enable tethering via wifi due to an error.");
@@ -150,10 +141,10 @@ void TetheringEnabler::RearSensorTouched()
       connection.enableTethering(technology);
       tts.say("Tethering via bluetooth has been enabled.");
     }
-
+    memory.subscribeToEvent("FrontTactilTouched", "TetheringEnabler", "FrontSensorTouched");
   }
   catch (const AL::ALError& e) {
     tts.say("I could not enable tethering via bluetooth. Are you sure that I have a bluetooth module installed?");
-    qiLogError("module.name") << e.what() << std::endl;
+    qiLogDebug("module.name") << e.what() << std::endl;
   }
 }
