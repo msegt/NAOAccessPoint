@@ -3,6 +3,11 @@
 #include <sys/socket.h>
 #include <sys/param.h>
 #include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/types.h>
 
 #include "tetheringenabler.h"
 
@@ -49,15 +54,37 @@ void TetheringEnabler::init()
     // time that the startup sound bips
     sleep(2);
 
-    // NAO will give instructions on how to activate tethering
-    //tts.say("Hello, you will be able to connect to me without cables using tethering mode: ");
-    tts.say("To activate tethering via wifi, touch the front sensor on my head.");
-    tts.say("To activate tethering via bluetooth, touch the rear sensor on my head.");
+    // If tethering is not enabled NAO will give instructions on how to enable
+    // it via wifi or bluetooth (if there is a bluetooth module installed.
+    if (!connection.getTetheringEnable("wifi") && !connection.getTetheringEnable("bluetooth")) {
 
-    // We subscribe to the events that detect touches on NAO's
-    // head and call the corresponding method.
-    memory.subscribeToEvent("FrontTactilTouched", "TetheringEnabler", "FrontSensorTouched");
-    memory.subscribeToEvent("RearTactilTouched", "TetheringEnabler", "RearSensorTouched");
+        technologies = connection.technologies();
+
+        for (int i = 0; i < technologies.size(); i++) {
+          technology.assign(technologies[i]);
+          if (technology.compare("bluetooth") == 0) {
+            // If there is a bluetooth module then the robot will allow you to enable
+            // tethering via bluetooth and will say how
+            tts.say("To activate tethering via bluetooth, touch the rear sensor on my head.");
+            memory.subscribeToEvent("RearTactilTouched", "TetheringEnabler", "RearSensorTouched");
+          }
+        }
+
+        tts.say("Hello, you will be able to connect to me without cables using tethering mode: ");
+        tts.say("To activate tethering via wifi, touch the front sensor on my head.");
+
+        // We subscribe to the events that detect touches on NAO's
+        // head and call the corresponding method.
+        memory.subscribeToEvent("FrontTactilTouched", "TetheringEnabler", "FrontSensorTouched");
+
+
+      } else if (connection.getTetheringEnable("wifi")) {
+        tts.say("Tethering via wifi is enabled, try to connect to access point.");
+        tts.say(access_point);
+        tts.say("With password.");
+        tts.say(passphrase);
+        memory.subscribeToEvent("FrontTactilTouched", "TetheringEnabler", "FrontSensorTouched");
+      }
 
   }
   catch (const AL::ALError& e) {
@@ -70,17 +97,28 @@ void TetheringEnabler::FrontSensorTouched()
   // Use a mutex to make it all thread safe
   AL::ALCriticalSection section(mutex);
 
-  // When the front sensor is touched the technology chosen will be wifi.
-  technology = "wifi";
-
-  // We unsubscribe from the events that detect touches on NAO's head to
-  // avoid it from reacting to several touches meanwhile it is already
-  // reacting to one.
-  // TODO change for a call to the destructor and try
-  memory.unsubscribeToEvent("FrontTactilTouched", "TetheringEnabler");
-  memory.unsubscribeToEvent("RearTactilTouched", "TetheringEnabler");
-
   try {
+    // We unsubscribe from the events that detect touches on NAO's head to
+    // avoid it from reacting to several touches meanwhile it is already
+    // reacting to one.
+    // TODO change for a call to the destructor and try
+
+    memory.unsubscribeToEvent("FrontTactilTouched", "TetheringEnabler");
+
+    technologies = connection.technologies();
+
+    for (int i = 0; i < technologies.size(); i++) {
+      technology.assign(technologies[i]);
+      if (technology.compare("bluetooth") == 0) {
+          // If there is a bluetooth module then the robot will allow you to enable
+          // tethering via bluetooth and will say how
+          memory.unsubscribeToEvent("RearTactilTouched", "TetheringEnabler");
+      }
+    }
+
+    // When the front sensor is touched the technology chosen will be wifi.
+    technology = "wifi";
+
     // If tethering via bluetooth is enabled it will be disabled.
     if (connection.getTetheringEnable("bluetooth") == true) {
       tts.say("Tethering was already enabled via bluetooth. Disabling tethering via bluetooth.");
@@ -104,6 +142,15 @@ void TetheringEnabler::FrontSensorTouched()
 
     }
     memory.subscribeToEvent("FrontTactilTouched", "TetheringEnabler", "FrontSensorTouched");
+
+    for (int i = 0; i < technologies.size(); i++) {
+      technology.assign(technologies[i]);
+      if (technology.compare("bluetooth") == 0) {
+          // If there is a bluetooth module then the robot will allow you to enable
+          // tethering via bluetooth and will say how
+          memory.subscribeToEvent("RearTactilTouched", "TetheringEnabler", "RearSensorTouched");
+      }
+    }
   }
   catch (const AL::ALError& e) {
     tts.say("I could not enable tethering via wifi due to an error.");
@@ -116,17 +163,26 @@ void TetheringEnabler::RearSensorTouched()
   // Use a mutex to make it all thread safe
   AL::ALCriticalSection section(mutex);
 
-  // When the rear sensor is touched the technology chosen will be
-  // bluetooth.
-  technology = "bluetooth";
-
-  // We unsubscribe from the events that detect touches on NAO's head to
-  // avoid it from reacting to several touches meanwhile it is already
-  // reacting to one.
-  memory.unsubscribeToEvent("FrontTactilTouched", "TetheringEnabler");
-  memory.unsubscribeToEvent("RearTactilTouched", "TetheringEnabler");
-
   try {
+    // We unsubscribe from the events that detect touches on NAO's head to
+    // avoid it from reacting to several touches meanwhile it is already
+    // reacting to one.
+    memory.unsubscribeToEvent("FrontTactilTouched", "TetheringEnabler");
+    technologies = connection.technologies();
+
+    for (int i = 0; i < technologies.size(); i++) {
+      technology.assign(technologies[i]);
+      if (technology.compare("bluetooth") == 0) {
+          // If there is a bluetooth module then the robot will allow you to enable
+          // tethering via bluetooth and will say how
+          memory.unsubscribeToEvent("RearTactilTouched", "TetheringEnabler");
+      }
+    }
+
+    // When the rear sensor is touched the technology chosen will be
+    // bluetooth.
+    technology = "bluetooth";
+
     // If tethering via wifi is enabled it will be disabled.
     if (connection.getTetheringEnable("wifi") == true) {
       tts.say("Tethering was already enabled via wifi. Disabling tethering via wifi.");
@@ -141,7 +197,16 @@ void TetheringEnabler::RearSensorTouched()
       connection.enableTethering(technology);
       tts.say("Tethering via bluetooth has been enabled.");
     }
+
     memory.subscribeToEvent("FrontTactilTouched", "TetheringEnabler", "FrontSensorTouched");
+    for (int i = 0; i < technologies.size(); i++) {
+      technology.assign(technologies[i]);
+      if (technology.compare("bluetooth") == 0) {
+          // If there is a bluetooth module then the robot will allow you to enable
+          // tethering via bluetooth and will say how
+          memory.subscribeToEvent("RearTactilTouched", "TetheringEnabler", "RearSensorTouched");
+      }
+    }
   }
   catch (const AL::ALError& e) {
     tts.say("I could not enable tethering via bluetooth. Are you sure that I have a bluetooth module installed?");
